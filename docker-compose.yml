@@ -1,0 +1,42 @@
+services:
+  triton:
+    build:
+      context: .
+      dockerfile: Dockerfile.triton
+    environment:
+      HF_MODEL_ID: Qwen/Qwen2.5-1.5B-Instruct
+      MAX_NEW_TOKENS: 300
+      TEMPERATURE: 0.55
+      TOP_P: 0.85
+    ports:
+      - '8000:8000'
+      - '8001:8001'
+      - '8002:8002'
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      PORT: 8080
+      DAILY_TRAINING_LIMIT: 5
+      TRITON_URL: http://triton:8000
+      TRITON_MODEL_NAME: softskill_generator
+    ports:
+      - '8080:8080'
+    depends_on:
+      - triton
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: http://localhost:8080/api
+    ports:
+      - '5173:80'
+    depends_on:
+      - backend
+    restart: unless-stopped

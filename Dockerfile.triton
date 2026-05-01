@@ -1,0 +1,13 @@
+FROM nvcr.io/nvidia/tritonserver:24.08-py3
+
+RUN python3 -m pip install --no-cache-dir \
+    torch==2.4.0 \
+    transformers==4.44.2 \
+    accelerate==0.34.2 \
+    sentencepiece==0.2.0
+
+COPY triton/model_repository /models
+
+EXPOSE 8000 8001 8002
+
+CMD ["tritonserver", "--model-repository=/models", "--http-port=8000", "--grpc-port=8001", "--metrics-port=8002"]

@@ -1,0 +1,33 @@
+# Go
+/bin/
+/pkg/
+/vendor/
+*.exe
+*.test
+coverage.out
+
+# Node
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.env
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# VS Code
+.vscode/
+
+# Python / Triton
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Docker and OS noise
+.docker/
+.DS_Store
+Thumbs.db
