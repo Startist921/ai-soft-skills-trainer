@@ -26,6 +26,74 @@ function getPasswordStrength(password) {
   return { label: 'сильный', score }
 }
 
+function buildProfileProgress(user, sessions, stats) {
+  const completed = Number(stats?.completed_sessions || (Array.isArray(sessions) ? sessions.length : 0))
+  const avgScore = Number(stats?.average_score || 0)
+  const avgPercent = Number(stats?.average_percent || Math.round(avgScore * 10))
+  const trend = stats?.trend || 'stable'
+  const doneRatio = user?.daily_limit ? Math.min(1, (user.used_today || 0) / user.daily_limit) : 0
+  const trendLabel = trend === 'up' ? 'растет' : trend === 'down' ? 'проседает' : 'стабильный'
+
+  if (completed >= 20 || avgScore >= 8) {
+    return {
+      stage: 'Продвинутый этап',
+      level: 'Переговорщик',
+      description: `Средняя оценка ${avgScore.toFixed(1)}/10 (${avgPercent}%). Тренд: ${trendLabel}. Вы уверенно ведете сложные разговоры.`,
+      percent: Math.max(70, Math.min(100, avgPercent || Math.round(70 + doneRatio * 30))),
+    }
+  }
+  if (completed >= 8 || avgScore >= 6) {
+    return {
+      stage: 'Устойчивый прогресс',
+      level: 'Практик',
+      description: `Средняя оценка ${avgScore.toFixed(1)}/10 (${avgPercent}%). Тренд: ${trendLabel}. Навык стабилизируется, ответы становятся точнее.`,
+      percent: Math.max(40, Math.min(85, avgPercent || Math.round(40 + doneRatio * 40))),
+    }
+  }
+  return {
+    stage: 'Базовый этап',
+    level: 'Старт',
+    description: `Пока собрано мало данных. Средняя оценка ${avgScore.toFixed(1)}/10. Фокус: эмпатия, ясность и конкретный следующий шаг.`,
+    percent: Math.max(10, Math.min(45, avgPercent || Math.round(10 + doneRatio * 30))),
+  }
+}
+
+function buildSparklinePoints(scores, width, height, padding) {
+  if (!Array.isArray(scores) || scores.length < 2) return ''
+  const stepX = (width - padding * 2) / (scores.length - 1)
+  const points = scores.map((score, idx) => {
+    const x = padding + idx * stepX
+    const y = padding + (10 - Math.max(0, Math.min(10, score))) * ((height - padding * 2) / 10)
+    return `${x},${y}`
+  })
+  return points.join(' ')
+}
+
+function ProgressSparkline({ scores }) {
+  if (!Array.isArray(scores) || scores.length < 2) {
+    return <p className="muted">График появится после нескольких разборов.</p>
+  }
+
+  const normalized = [...scores].reverse()
+  const width = 280
+  const height = 90
+  const padding = 10
+  const points = buildSparklinePoints(normalized, width, height, padding)
+  const last = normalized[normalized.length - 1]
+
+  return (
+    <div className="sparkline-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} className="sparkline" role="img" aria-label="Динамика оценок">
+        <polyline points={points} />
+      </svg>
+      <div className="sparkline-meta">
+        <span>Последняя: {last}/10</span>
+        <span>Точек: {normalized.length}</span>
+      </div>
+    </div>
+  )
+}
+
 const fallbackScenarios = [
   {
     id: 'conflict-colleague',
@@ -44,6 +112,7 @@ function App() {
     return saved ? JSON.parse(saved) : null
   })
   const [sessions, setSessions] = useState([])
+  const [profileStats, setProfileStats] = useState(null)
   const [sessionId, setSessionId] = useState('')
   const [scenario, setScenario] = useState(null)
   const [scenarios, setScenarios] = useState(fallbackScenarios)
@@ -85,6 +154,7 @@ function App() {
     } else {
       localStorage.removeItem('softskills:user')
       setSessions([])
+      setProfileStats(null)
     }
   }, [user?.id])
 
@@ -127,6 +197,7 @@ function App() {
       if (response.ok) {
         setUser(data.user)
         setSessions(Array.isArray(data.sessions) ? data.sessions : [])
+        setProfileStats(data.stats || null)
       }
     } catch {
       // Profile refresh is non-blocking for the interface.
@@ -384,6 +455,7 @@ function App() {
           <AccountPage
             user={user}
             sessions={sessions}
+            profileStats={profileStats}
             authMode={authMode}
             setAuthMode={setAuthMode}
             authForm={authForm}
@@ -428,6 +500,7 @@ function HomePage({ user, remaining, onStartRandom, onOpenAccount, onOpenTrainer
 function AccountPage({
   user,
   sessions,
+  profileStats,
   authMode,
   setAuthMode,
   authForm,
@@ -438,13 +511,14 @@ function AccountPage({
   loading,
 }) {
   const passwordStrength = getPasswordStrength(authForm.password)
+  const profileProgress = buildProfileProgress(user, sessions, profileStats)
 
   if (!user) {
     return (
       <section className="account-layout">
-        <div>
+        <div className="account-auth-copy">
           <p className="eyebrow">Аккаунт</p>
-          <h1>{authMode === 'login' ? 'Вход' : 'Регистрация'}</h1>
+          <h1 className="account-title">{authMode === 'login' ? 'Вход' : 'Регистрация'}</h1>
           <p className="muted">Кабинет нужен для дневных лимитов и истории диалогов.</p>
         </div>
         <form className="auth-card" onSubmit={onSubmitAuth}>
@@ -491,8 +565,17 @@ function AccountPage({
     <section className="account-layout">
       <div className="profile-card">
         <p className="eyebrow">Личный кабинет</p>
-        <h1>{user.name}</h1>
+        <h1 className="account-title">{user.name}</h1>
         <p className="muted">{user.email}</p>
+        <div className="profile-progress">
+          <div className="profile-progress-header">
+            <strong>{profileProgress.level}</strong>
+            <span>{profileProgress.percent}%</span>
+          </div>
+          <p className="muted">{profileProgress.stage}</p>
+          <p>{profileProgress.description}</p>
+          <ProgressSparkline scores={profileStats?.recent_scores || []} />
+        </div>
         <div className="limit-row">
           <span>Осталось сегодня</span>
           <strong>{remaining} / {user.daily_limit}</strong>

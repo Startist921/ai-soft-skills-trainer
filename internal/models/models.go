@@ -49,3 +49,14 @@ type Feedback struct {
 	BetterExample string    `json:"better_example"`
 	CreatedAt     time.Time `json:"created_at"`
 }
+
+type UserFeedbackStats struct {
+	CompletedSessions int     `json:"completed_sessions"`
+	FeedbackCount     int     `json:"feedback_count"`
+	AverageScore      float64 `json:"average_score"`
+	AveragePercent    int     `json:"average_percent"`
+	RecentAverage     float64 `json:"recent_average"`
+	PreviousAverage   float64 `json:"previous_average"`
+	Trend             string  `json:"trend"`
+	RecentScores      []int   `json:"recent_scores"`
+}

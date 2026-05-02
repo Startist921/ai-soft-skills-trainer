@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ai-soft-skills-trainer/internal/models"
 )
@@ -20,6 +21,7 @@ type Store interface {
 	SaveMessage(sessionID string, message models.Message) error
 	SaveFeedback(feedback models.Feedback) error
 	GetFeedback(sessionID string) (*models.Feedback, error)
+	GetUserFeedbackStats(userID string) (models.UserFeedbackStats, error)
 }
 
 type InMemoryStore struct {
@@ -164,6 +166,80 @@ func (m *InMemoryStore) GetFeedback(sessionID string) (*models.Feedback, error) 
 		return nil, errors.New("feedback not found")
 	}
 	return &feedback, nil
+}
+
+func (m *InMemoryStore) GetUserFeedbackStats(userID string) (models.UserFeedbackStats, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	stats := models.UserFeedbackStats{Trend: "stable"}
+	type scoredFeedback struct {
+		score int
+		at    time.Time
+	}
+	var feedbackItems []scoredFeedback
+
+	for _, session := range m.sessions {
+		if session.UserID != userID {
+			continue
+		}
+		stats.CompletedSessions++
+		if feedback, ok := m.feedback[session.ID]; ok {
+			stats.FeedbackCount++
+			stats.AverageScore += float64(feedback.Score)
+			feedbackItems = append(feedbackItems, scoredFeedback{
+				score: feedback.Score,
+				at:    feedback.CreatedAt,
+			})
+		}
+	}
+
+	if stats.FeedbackCount > 0 {
+		stats.AverageScore = stats.AverageScore / float64(stats.FeedbackCount)
+		stats.AveragePercent = int(stats.AverageScore*10 + 0.5)
+	}
+
+	sort.Slice(feedbackItems, func(i, j int) bool { return feedbackItems[i].at.After(feedbackItems[j].at) })
+	for idx, item := range feedbackItems {
+		if idx >= 12 {
+			break
+		}
+		stats.RecentScores = append(stats.RecentScores, item.score)
+	}
+	if len(feedbackItems) >= 2 {
+		split := len(feedbackItems) / 2
+		recent := make([]int, 0, split)
+		previous := make([]int, 0, len(feedbackItems)-split)
+		for _, item := range feedbackItems[:split] {
+			recent = append(recent, item.score)
+		}
+		for _, item := range feedbackItems[split:] {
+			previous = append(previous, item.score)
+		}
+		stats.RecentAverage = averageIntScores(recent)
+		stats.PreviousAverage = averageIntScores(previous)
+		if stats.RecentAverage-stats.PreviousAverage >= 0.5 {
+			stats.Trend = "up"
+		} else if stats.PreviousAverage-stats.RecentAverage >= 0.5 {
+			stats.Trend = "down"
+		}
+	} else if len(feedbackItems) == 1 {
+		stats.RecentAverage = float64(feedbackItems[0].score)
+		stats.PreviousAverage = float64(feedbackItems[0].score)
+	}
+
+	return stats, nil
+}
+
+func averageIntScores(items []int) float64 {
+	if len(items) == 0 {
+		return 0
+	}
+	sum := 0
+	for _, value := range items {
+		sum += value
+	}
+	return float64(sum) / float64(len(items))
 }
 
 func normalizeEmail(email string) string {

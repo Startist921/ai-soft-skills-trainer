@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"math/rand"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,19 +82,23 @@ func (s *SessionService) Login(email, password string) (*models.User, error) {
 	return sanitizeUser(*user), nil
 }
 
-func (s *SessionService) Profile(userID string) (*models.User, []models.SessionSummary, error) {
+func (s *SessionService) Profile(userID string) (*models.User, []models.SessionSummary, models.UserFeedbackStats, error) {
 	user, err := s.store.GetUser(userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, models.UserFeedbackStats{}, err
 	}
 	if err := s.resetUsageIfNeeded(user); err != nil {
-		return nil, nil, err
+		return nil, nil, models.UserFeedbackStats{}, err
 	}
 	sessions, err := s.store.ListSessionsByUser(userID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, models.UserFeedbackStats{}, err
 	}
-	return sanitizeUser(*user), sessions, nil
+	stats, err := s.store.GetUserFeedbackStats(userID)
+	if err != nil {
+		return nil, nil, models.UserFeedbackStats{}, err
+	}
+	return sanitizeUser(*user), sessions, stats, nil
 }
 
 func (s *SessionService) ListScenarios() []Scenario {
@@ -397,13 +403,13 @@ func extractJSON(raw string) string {
 
 func parseFeedback(raw string) (*models.Feedback, error) {
 	jsonText := extractJSON(raw)
-	if jsonText == "" {
-		return nil, errors.New("feedback response is not valid json")
-	}
-
 	var feedback models.Feedback
-	if err := json.Unmarshal([]byte(jsonText), &feedback); err != nil {
-		return nil, err
+	if jsonText != "" {
+		if err := json.Unmarshal([]byte(jsonText), &feedback); err != nil {
+			feedback = buildFallbackFeedback(raw)
+		}
+	} else {
+		feedback = buildFallbackFeedback(raw)
 	}
 
 	if feedback.Score < 0 {
@@ -412,7 +418,113 @@ func parseFeedback(raw string) (*models.Feedback, error) {
 	if feedback.Score > 10 {
 		feedback.Score = 10
 	}
+
+	if len(feedback.Strengths) == 0 {
+		feedback.Strengths = []string{"Вы сохраняли участие в диалоге и отвечали по теме."}
+	}
+	if len(feedback.Improvements) == 0 {
+		feedback.Improvements = []string{"Добавляйте больше конкретики и фиксируйте следующий шаг договоренности."}
+	}
+	if strings.TrimSpace(feedback.Summary) == "" {
+		feedback.Summary = "Диалог завершен. Сделайте акцент на структуре ответа: признать эмоцию, уточнить запрос, предложить конкретный шаг."
+	}
+	if strings.TrimSpace(feedback.BetterExample) == "" {
+		feedback.BetterExample = "Вижу, что ситуация напряженная. Давайте зафиксируем один конкретный шаг на сегодня и срок проверки результата."
+	}
 	return &feedback, nil
+}
+
+func buildFallbackFeedback(raw string) models.Feedback {
+	text := strings.TrimSpace(raw)
+	text = strings.TrimPrefix(text, "```json")
+	text = strings.TrimPrefix(text, "```")
+	text = strings.TrimSuffix(text, "```")
+	text = strings.TrimSpace(text)
+
+	score := extractFallbackScore(text)
+	lines := collectContentLines(text)
+
+	strengths := []string{}
+	improvements := []string{}
+	for _, line := range lines {
+		lower := strings.ToLower(line)
+		switch {
+		case strings.Contains(lower, "сильн") || strings.Contains(lower, "что получилось") || strings.Contains(lower, "хорошо"):
+			strengths = append(strengths, line)
+		case strings.Contains(lower, "улучш") || strings.Contains(lower, "слаб") || strings.Contains(lower, "стоит"):
+			improvements = append(improvements, line)
+		}
+	}
+
+	if len(strengths) == 0 && len(lines) > 0 {
+		strengths = append(strengths, lines[0])
+	}
+	if len(improvements) == 0 && len(lines) > 1 {
+		improvements = append(improvements, lines[len(lines)-1])
+	}
+
+	summary := text
+	if len(summary) > 300 {
+		summary = summary[:300] + "..."
+	}
+
+	return models.Feedback{
+		Score:         score,
+		Strengths:     strengths,
+		Improvements:  improvements,
+		Summary:       summary,
+		BetterExample: "Понимаю вашу позицию и риск. Предлагаю маленький тестовый шаг до конца недели, после чего сверим результат и решим дальше.",
+	}
+}
+
+func extractFallbackScore(text string) int {
+	percentRe := regexp.MustCompile(`([0-9]{1,3})\s*%`)
+	if match := percentRe.FindStringSubmatch(text); len(match) > 1 {
+		if value, err := strconv.Atoi(match[1]); err == nil {
+			if value < 0 {
+				value = 0
+			}
+			if value > 100 {
+				value = 100
+			}
+			return int(float64(value)/10.0 + 0.5)
+		}
+	}
+
+	scoreRe := regexp.MustCompile(`(?i)(оценка|score)[^0-9]{0,12}([0-9]{1,2})`)
+	if match := scoreRe.FindStringSubmatch(text); len(match) > 2 {
+		if value, err := strconv.Atoi(match[2]); err == nil {
+			if value < 0 {
+				return 0
+			}
+			if value > 10 {
+				return 10
+			}
+			return value
+		}
+	}
+
+	return 6
+}
+
+func collectContentLines(text string) []string {
+	parts := strings.Split(text, "\n")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		line := strings.TrimSpace(part)
+		if line == "" {
+			continue
+		}
+		line = strings.TrimPrefix(line, "-")
+		line = strings.TrimPrefix(line, "*")
+		line = strings.TrimPrefix(line, "•")
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		result = append(result, line)
+	}
+	return result
 }
 
 func hashPassword(password string) string {

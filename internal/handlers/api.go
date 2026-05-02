@@ -28,8 +28,9 @@ type authResponse struct {
 }
 
 type profileResponse struct {
-	User     *models.User            `json:"user"`
-	Sessions []models.SessionSummary `json:"sessions"`
+	User     *models.User             `json:"user"`
+	Sessions []models.SessionSummary  `json:"sessions"`
+	Stats    models.UserFeedbackStats `json:"stats"`
 }
 
 type startSessionRequest struct {
@@ -55,6 +56,7 @@ type sendMessageResponse struct {
 
 type feedbackResponse struct {
 	Score         int      `json:"score"`
+	ScorePercent  int      `json:"score_percent"`
 	Strengths     []string `json:"strengths"`
 	Improvements  []string `json:"improvements"`
 	Summary       string   `json:"summary"`
@@ -99,13 +101,13 @@ func (h *Handler) Profile(c *gin.Context) {
 		return
 	}
 
-	user, sessions, err := h.sessionService.Profile(userID)
+	user, sessions, stats, err := h.sessionService.Profile(userID)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, profileResponse{User: user, Sessions: sessions})
+	c.JSON(http.StatusOK, profileResponse{User: user, Sessions: sessions, Stats: stats})
 }
 
 func (h *Handler) ListScenarios(c *gin.Context) {
@@ -202,6 +204,7 @@ func (h *Handler) GetFeedback(c *gin.Context) {
 
 	c.JSON(http.StatusOK, feedbackResponse{
 		Score:         feedback.Score,
+		ScorePercent:  feedback.Score * 10,
 		Strengths:     feedback.Strengths,
 		Improvements:  feedback.Improvements,
 		Summary:       feedback.Summary,

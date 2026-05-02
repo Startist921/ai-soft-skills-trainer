@@ -2,6 +2,7 @@ function FeedbackPanel({ feedback, scenario, progress }) {
   const strengths = Array.isArray(feedback?.strengths) ? feedback.strengths : []
   const improvements = Array.isArray(feedback?.improvements) ? feedback.improvements : []
   const score = feedback?.score ?? 0
+  const scorePercent = typeof feedback?.score_percent === 'number' ? feedback.score_percent : score * 10
 
   return (
     <aside className="feedback-panel">
@@ -12,7 +13,7 @@ function FeedbackPanel({ feedback, scenario, progress }) {
 
       <div className="score-orbit">
         <strong>{feedback ? score : Math.round(progress / 10)}</strong>
-        <span>{feedback ? 'из 10' : 'разогрев'}</span>
+        <span>{feedback ? `${scorePercent}%` : 'разогрев'}</span>
       </div>
 
       {!feedback ? (

@@ -466,6 +466,17 @@ h2 {
   align-items: start;
 }
 
+.account-auth-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.account-title {
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  line-height: 1.08;
+  margin-bottom: 4px;
+}
+
 .auth-card,
 .profile-card,
 .history-panel {
@@ -497,6 +508,52 @@ h2 {
   border-top: 1px solid rgba(21, 21, 21, 0.1);
   border-bottom: 1px solid rgba(21, 21, 21, 0.1);
   padding: 14px 0;
+}
+
+.profile-progress {
+  border: 1px solid rgba(21, 21, 21, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(50, 125, 114, 0.06);
+  display: grid;
+  gap: 6px;
+}
+
+.profile-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sparkline-wrap {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.sparkline {
+  width: 100%;
+  height: 90px;
+  border: 1px solid rgba(21, 21, 21, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.sparkline polyline {
+  fill: none;
+  stroke: #327d72;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sparkline-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #625b50;
+  font-size: 0.86rem;
 }
 
 .limit-row strong {

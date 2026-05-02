@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -265,4 +266,69 @@ FROM feedback WHERE session_id = $1
 		return nil, err
 	}
 	return &feedback, nil
+}
+
+func (p *PostgresStore) GetUserFeedbackStats(userID string) (models.UserFeedbackStats, error) {
+	ctx := context.Background()
+	stats := models.UserFeedbackStats{Trend: "stable"}
+
+	if err := p.db.QueryRow(ctx, `
+SELECT COUNT(*) FROM sessions WHERE user_id = $1
+`, userID).Scan(&stats.CompletedSessions); err != nil {
+		return stats, err
+	}
+
+	rows, err := p.db.Query(ctx, `
+SELECT f.score
+FROM feedback f
+JOIN sessions s ON s.id = f.session_id
+WHERE s.user_id = $1
+ORDER BY f.created_at DESC
+`, userID)
+	if err != nil {
+		return stats, err
+	}
+	defer rows.Close()
+
+	scores := make([]int, 0)
+	for rows.Next() {
+		var score int
+		if err := rows.Scan(&score); err != nil {
+			return stats, err
+		}
+		scores = append(scores, score)
+		if len(stats.RecentScores) < 12 {
+			stats.RecentScores = append(stats.RecentScores, score)
+		}
+	}
+
+	stats.FeedbackCount = len(scores)
+	if stats.FeedbackCount == 0 {
+		return stats, nil
+	}
+
+	total := 0
+	for _, score := range scores {
+		total += score
+	}
+	stats.AverageScore = float64(total) / float64(stats.FeedbackCount)
+	stats.AveragePercent = int(math.Round(stats.AverageScore * 10))
+
+	if len(scores) >= 2 {
+		split := len(scores) / 2
+		recent := averageIntScores(scores[:split])
+		previous := averageIntScores(scores[split:])
+		stats.RecentAverage = recent
+		stats.PreviousAverage = previous
+		if recent-previous >= 0.5 {
+			stats.Trend = "up"
+		} else if previous-recent >= 0.5 {
+			stats.Trend = "down"
+		}
+	} else {
+		stats.RecentAverage = float64(scores[0])
+		stats.PreviousAverage = float64(scores[0])
+	}
+
+	return stats, nil
 }
