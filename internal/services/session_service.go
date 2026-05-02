@@ -343,7 +343,7 @@ SCENARIO: ` + scenario.Title + `
 SKILL: ` + scenario.Skill + `
 DIFFICULTY: ` + scenario.Difficulty + `
 
-Верни только валидный JSON без markdown и без текста вокруг:
+Отвечай только валидным JSON-объектом. Никаких markdown-блоков, списка, пояснений или текста перед/после JSON.
 {
   "score": number from 0 to 10,
   "strengths": [string],
@@ -355,17 +355,54 @@ DIFFICULTY: ` + scenario.Difficulty + `
 Оценивай только реплики пользователя. Критерии: эмпатия, ясность, активное слушание, границы, конкретный следующий шаг, спокойствие под давлением. Пиши конкретно, без общих похвал.`
 }
 
-func parseFeedback(raw string) (*models.Feedback, error) {
+func extractJSON(raw string) string {
 	raw = strings.TrimSpace(raw)
 	start := strings.Index(raw, "{")
-	end := strings.LastIndex(raw, "}")
-	if start == -1 || end == -1 || end < start {
+	if start == -1 {
+		return ""
+	}
+
+	depth := 0
+	inString := false
+	escaped := false
+	for i := start; i < len(raw); i++ {
+		ch := raw[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == '"' {
+			inString = !inString
+			continue
+		}
+		if inString {
+			continue
+		}
+		if ch == '{' {
+			depth++
+		}
+		if ch == '}' {
+			depth--
+			if depth == 0 {
+				return raw[start : i+1]
+			}
+		}
+	}
+	return ""
+}
+
+func parseFeedback(raw string) (*models.Feedback, error) {
+	jsonText := extractJSON(raw)
+	if jsonText == "" {
 		return nil, errors.New("feedback response is not valid json")
 	}
 
-	trimmed := raw[start : end+1]
 	var feedback models.Feedback
-	if err := json.Unmarshal([]byte(trimmed), &feedback); err != nil {
+	if err := json.Unmarshal([]byte(jsonText), &feedback); err != nil {
 		return nil, err
 	}
 

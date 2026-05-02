@@ -64,7 +64,19 @@ func main() {
 		dailyLimit = parsed
 	}
 
-	store := storage.NewInMemoryStore()
+	var store storage.Store
+	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
+		pgStore, err := storage.NewPostgresStore(databaseURL)
+		if err != nil {
+			log.Fatalf("failed to initialize postgres store: %v", err)
+		}
+		store = pgStore
+		log.Println("using postgres storage")
+	} else {
+		store = storage.NewInMemoryStore()
+		log.Println("using in-memory storage")
+	}
+
 	aiclient := ai.NewClient(mlServiceURL, modelName, maxNewTokens, temperature, topP)
 	service := services.NewSessionService(store, aiclient, dailyLimit)
 	h := handlers.NewHandler(service)
