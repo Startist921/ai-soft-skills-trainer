@@ -18,8 +18,43 @@ import (
 func main() {
 	loadEnvFile(".env")
 
-	tritonURL := os.Getenv("TRITON_URL")
-	modelName := os.Getenv("TRITON_MODEL_NAME")
+	mlServiceURL := os.Getenv("ML_SERVICE_URL")
+	if mlServiceURL == "" {
+		mlServiceURL = "http://localhost:8087"
+	}
+
+	modelName := os.Getenv("MODEL_NAME")
+	if modelName == "" {
+		modelName = "GigaChat"
+	}
+
+	maxNewTokens := 120
+	if value := os.Getenv("MAX_NEW_TOKENS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			log.Fatalf("invalid MAX_NEW_TOKENS value: %v", err)
+		}
+		maxNewTokens = parsed
+	}
+
+	temperature := 0.55
+	if value := os.Getenv("TEMPERATURE"); value != "" {
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			log.Fatalf("invalid TEMPERATURE value: %v", err)
+		}
+		temperature = parsed
+	}
+
+	topP := 0.85
+	if value := os.Getenv("TOP_P"); value != "" {
+		parsed, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			log.Fatalf("invalid TOP_P value: %v", err)
+		}
+		topP = parsed
+	}
+
 	dailyLimit := 5
 	if value := os.Getenv("DAILY_TRAINING_LIMIT"); value != "" {
 		parsed, err := strconv.Atoi(value)
@@ -30,7 +65,7 @@ func main() {
 	}
 
 	store := storage.NewInMemoryStore()
-	aiclient := ai.NewClient(tritonURL, modelName)
+	aiclient := ai.NewClient(mlServiceURL, modelName, maxNewTokens, temperature, topP)
 	service := services.NewSessionService(store, aiclient, dailyLimit)
 	h := handlers.NewHandler(service)
 
@@ -38,7 +73,7 @@ func main() {
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-User-ID")
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return

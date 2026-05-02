@@ -1,17 +1,12 @@
 services:
-  triton:
+  ml-service:
     build:
-      context: .
-      dockerfile: Dockerfile.triton
-    environment:
-      HF_MODEL_ID: Qwen/Qwen2.5-1.5B-Instruct
-      MAX_NEW_TOKENS: 300
-      TEMPERATURE: 0.55
-      TOP_P: 0.85
+      context: ./ml-service
+      dockerfile: Dockerfile
     ports:
-      - '8000:8000'
-      - '8001:8001'
-      - '8002:8002'
+      - '8087:8087'
+    environment:
+      - SBER_AUTH=${SBER_AUTH:-}
     restart: unless-stopped
 
   backend:
@@ -21,12 +16,15 @@ services:
     environment:
       PORT: 8080
       DAILY_TRAINING_LIMIT: 5
-      TRITON_URL: http://triton:8000
-      TRITON_MODEL_NAME: softskill_generator
+      ML_SERVICE_URL: http://ml-service:8087
+      MODEL_NAME: GigaChat
+      MAX_NEW_TOKENS: 120
+      TEMPERATURE: 0.55
+      TOP_P: 0.85
     ports:
       - '8080:8080'
     depends_on:
-      - triton
+      - ml-service
     restart: unless-stopped
 
   frontend:

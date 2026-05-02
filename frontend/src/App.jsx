@@ -32,7 +32,7 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [aiTyping, setAiTyping] = useState(false)
   const [error, setError] = useState('')
-  const [modelState, setModelState] = useState('Проверяем Triton...')
+  const [modelState, setModelState] = useState('Проверяем модель...')
   const [authMode, setAuthMode] = useState('login')
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' })
 
@@ -89,10 +89,10 @@ function App() {
         }
       }
 
-      setModelState(modelResponse.ok ? 'Triton online' : 'Triton загружает модель...')
+      setModelState(modelResponse.ok ? 'Сервис online' : 'Модель загружается...')
       return modelResponse.ok
     } catch {
-      setModelState('Triton загружает модель...')
+      setModelState('Модель загружается...')
       return false
     }
   }
@@ -156,7 +156,7 @@ function App() {
 
       const data = await response.json()
       if (!response.ok) {
-        setError(data.error || 'Не удалось начать сессию. Проверьте backend и Triton.')
+        setError(data.error || 'Не удалось начать сессию. Проверьте backend и inference-сервис.')
         await loadProfile()
         return
       }
@@ -188,7 +188,7 @@ function App() {
 
       const data = await response.json()
       if (!response.ok) {
-        setError(data.error || 'Triton не вернул ответ.')
+        setError(data.error || 'Сервер не вернул ответ от модели.')
         return
       }
 
@@ -356,7 +356,7 @@ function HomePage({ user, remaining, onStartRandom, onOpenAccount, onOpenTrainer
         <p className="eyebrow">AI roleplay trainer</p>
         <h1>Тренируйте сложные разговоры до реальной встречи.</h1>
         <p>
-          Сервис создает напряженные рабочие диалоги, ведет роль собеседника через Triton LLM
+          Сервис создает напряженные рабочие диалоги, ведет роль собеседника через ml-service
           и после тренировки разбирает ваши ответы по эмпатии, ясности и конкретике.
         </p>
         <div className="hero-actions">

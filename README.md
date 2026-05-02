@@ -1,20 +1,21 @@
 # AI Soft Skills Trainer
 
-Веб-тренажер сложных разговоров: React-фронтенд, Go backend и локальный Triton Inference Server с генеративной LLM `softskill_generator`.
+Веб-тренажер сложных разговоров: React-фронтенд, Go backend и генерация через `ml-service`.
 
 ## Что внутри
 
 - `frontend/` - React + Vite интерфейс с главной страницей, меню тренировок и личным кабинетом.
 - `cmd/server` - Go + Gin API.
-- `internal/services` - аккаунты, дневные лимиты, сценарии, сессии, промпты и разбор диалогов.
-- `internal/ai` - HTTP-клиент Triton Inference Server.
-- `triton/model_repository/softskill_generator` - Triton Python backend, который запускает Hugging Face causal LLM.
-- `docker-compose.yml` - frontend, backend и Triton одной командой.
+- `internal/services` - бизнес-логика с пользователями, лимитами, сценариями, сессиями и разбором диалогов.
+- `internal/ai` - HTTP-клиент для inference-сервиса `ml-service`.
+- `docker-compose.yml` - frontend, backend и inference-сервис.
 
 ## Запуск через Docker
 
+1. Убедитесь, что `ml-service` настроен и доступен.
+2. Запустите проект через Docker Compose:
+
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
@@ -22,9 +23,9 @@ docker compose up --build
 
 - frontend: `http://localhost:5173`
 - backend: `http://localhost:8080`
-- Triton HTTP API: `http://localhost:8000`
+- inference: `http://localhost:8087`
 
-Проверка модели:
+Проверка работы inference-сервиса:
 
 ```bash
 curl http://localhost:8080/api/check-models
@@ -32,20 +33,27 @@ curl http://localhost:8080/api/check-models
 
 ## Переменные окружения
 
+Вставляйте свои значения в корневой файл `.env`.
+Если вы не используете Docker Compose, можно скопировать `.env.example` в `.env` и заменить нужные параметры.
+
 ```env
 PORT=8080
 DAILY_TRAINING_LIMIT=5
-TRITON_URL=http://localhost:8000
-TRITON_MODEL_NAME=softskill_generator
-HF_MODEL_ID=Qwen/Qwen2.5-1.5B-Instruct
+ML_SERVICE_URL=http://ml-service:8087
+MODEL_NAME=GigaChat
+SBER_AUTH=
 MAX_NEW_TOKENS=300
 TEMPERATURE=0.55
 TOP_P=0.85
 ```
 
-В Docker Compose backend использует внутренний адрес `http://triton:8000`.
+Объяснение переменных:
+- `ML_SERVICE_URL` — URL inference-сервиса `ml-service`. В Docker Compose это `http://ml-service:8087`.
+- `MODEL_NAME` — имя модели, которая используется `ml-service` (по умолчанию `GigaChat`).
+- `SBER_AUTH` — ключ/токен доступа к Gigachat/Sber, если ваш inference-сервис требует авторизации. Вставляйте сюда строку токена, иначе оставьте пустым.
+- `MAX_NEW_TOKENS`, `TEMPERATURE`, `TOP_P` — параметры генерации для модели.
 
-По умолчанию Triton загружает `Qwen/Qwen2.5-1.5B-Instruct`. Это настоящая генеративная instruction-tuned LLM, а не набор правил. Для более сильной генерации можно заменить `HF_MODEL_ID` на совместимую causal/chat модель крупнее, если хватает CPU/GPU и памяти.
+Если `ml-service` запускается локально на той же машине, используйте `http://localhost:8087` в `ML_SERVICE_URL`.
 
 ## Возможности
 
@@ -54,7 +62,7 @@ TOP_P=0.85
 - Автоматический сброс лимита по UTC-дате.
 - Сохранение истории диалогов в backend-памяти текущего процесса.
 - Меню сценариев и случайный диалог с новым контекстом на каждую попытку.
-- Разбор завершенного диалога через ту же LLM в Triton.
+- Разбор завершенного диалога через тот же inference-сервис.
 
 ## API
 
@@ -63,13 +71,13 @@ TOP_P=0.85
 - `GET /api/profile` - профиль, лимиты и история. Требует `X-User-ID`.
 - `GET /api/scenarios` - список тренировочных сценариев.
 - `POST /api/start-session` - создать сессию и получить первую реплику модели. Требует `X-User-ID`.
-- `POST /api/send-message` - отправить ответ пользователя в Triton-модель. Требует `X-User-ID`.
+- `POST /api/send-message` - отправить ответ пользователя в модель через `ml-service`. Требует `X-User-ID`.
 - `GET /api/sessions/:id` - открыть сохраненный диалог. Требует `X-User-ID`.
 - `GET /api/get-feedback?session_id=...` - получить JSON-разбор диалога. Требует `X-User-ID`.
-- `GET /api/check-models` - проверить metadata модели в Triton.
+- `GET /api/check-models` - проверить metadata inference-сервиса.
 
 ## Важно
 
-Mock-режим удален. Если Triton или Hugging Face модель недоступны, backend возвращает ошибку, а UI показывает проблему со статусом inference server.
+Mock-режим удален. Если `ml-service` недоступен, backend возвращает ошибку, а UI показывает проблему со статусом inference server.
 
 Сейчас пользователи, лимиты и история хранятся в памяти Go-процесса. Для production следующим шагом стоит заменить `internal/storage` на PostgreSQL или SQLite.
