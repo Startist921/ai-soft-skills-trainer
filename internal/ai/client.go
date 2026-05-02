@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -47,6 +48,8 @@ type generationPayload struct {
 	SystemPrompt string           `json:"system_prompt"`
 	Messages     []models.Message `json:"messages"`
 }
+
+var technicalPrefixRe = regexp.MustCompile(`(?im)^\s*(assistant|agent|ассистент|агент)\s*[:\-]\s*`)
 
 func NewClient(serviceURL, modelName string, maxTokens int, temperature float64, topP float64) *Client {
 	if serviceURL == "" {
@@ -115,9 +118,9 @@ func (c *Client) SendMessage(ctx context.Context, systemPrompt string, history [
 	}
 
 	if generateResp.Choices[0].Message.Content != "" {
-		return strings.TrimSpace(generateResp.Choices[0].Message.Content), nil
+		return sanitizeModelText(generateResp.Choices[0].Message.Content), nil
 	}
-	return strings.TrimSpace(generateResp.Choices[0].Text), nil
+	return sanitizeModelText(generateResp.Choices[0].Text), nil
 }
 
 func (c *Client) GetModels(ctx context.Context) ([]byte, error) {
@@ -166,4 +169,17 @@ func (c *Client) buildPrompt(systemPrompt string, history []models.Message) stri
 	}
 	builder.WriteString("Assistant:")
 	return builder.String()
+}
+
+func sanitizeModelText(text string) string {
+	cleaned := strings.TrimSpace(text)
+	if cleaned == "" {
+		return cleaned
+	}
+
+	// Some models prepend role labels like "Assistant:" or "Agent:".
+	cleaned = technicalPrefixRe.ReplaceAllString(cleaned, "")
+	cleaned = strings.TrimSpace(cleaned)
+
+	return cleaned
 }

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -431,6 +432,7 @@ func parseFeedback(raw string) (*models.Feedback, error) {
 	if strings.TrimSpace(feedback.BetterExample) == "" {
 		feedback.BetterExample = "Вижу, что ситуация напряженная. Давайте зафиксируем один конкретный шаг на сегодня и срок проверки результата."
 	}
+	sanitizeFeedbackStrings(&feedback)
 	return &feedback, nil
 }
 
@@ -464,17 +466,19 @@ func buildFallbackFeedback(raw string) models.Feedback {
 	}
 
 	summary := text
-	if len(summary) > 300 {
-		summary = summary[:300] + "..."
+	if utf8.RuneCountInString(summary) > 300 {
+		summary = truncateRunes(summary, 300) + "..."
 	}
 
-	return models.Feedback{
+	feedback := models.Feedback{
 		Score:         score,
 		Strengths:     strengths,
 		Improvements:  improvements,
 		Summary:       summary,
 		BetterExample: "Понимаю вашу позицию и риск. Предлагаю маленький тестовый шаг до конца недели, после чего сверим результат и решим дальше.",
 	}
+	sanitizeFeedbackStrings(&feedback)
+	return feedback
 }
 
 func extractFallbackScore(text string) int {
@@ -522,9 +526,31 @@ func collectContentLines(text string) []string {
 		if line == "" {
 			continue
 		}
-		result = append(result, line)
+		result = append(result, strings.ToValidUTF8(line, ""))
 	}
 	return result
+}
+
+func truncateRunes(text string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(text)
+	if len(runes) <= limit {
+		return text
+	}
+	return string(runes[:limit])
+}
+
+func sanitizeFeedbackStrings(feedback *models.Feedback) {
+	feedback.Summary = strings.ToValidUTF8(feedback.Summary, "")
+	feedback.BetterExample = strings.ToValidUTF8(feedback.BetterExample, "")
+	for idx, item := range feedback.Strengths {
+		feedback.Strengths[idx] = strings.ToValidUTF8(item, "")
+	}
+	for idx, item := range feedback.Improvements {
+		feedback.Improvements[idx] = strings.ToValidUTF8(item, "")
+	}
 }
 
 func hashPassword(password string) string {
