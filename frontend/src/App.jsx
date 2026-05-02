@@ -69,7 +69,9 @@ function buildSparklinePoints(scores, width, height, padding) {
   return points.join(' ')
 }
 
-function ProgressSparkline({ scores }) {
+function ProgressSparkline({ scores, trend }) {
+  const [hoveredIdx, setHoveredIdx] = useState(-1)
+
   if (!Array.isArray(scores) || scores.length < 2) {
     return <p className="muted">График появится после нескольких разборов.</p>
   }
@@ -80,14 +82,33 @@ function ProgressSparkline({ scores }) {
   const padding = 10
   const points = buildSparklinePoints(normalized, width, height, padding)
   const last = normalized[normalized.length - 1]
+  const lineClass = trend === 'up' ? 'trend-up' : trend === 'down' ? 'trend-down' : 'trend-stable'
+  const stepX = (width - padding * 2) / (normalized.length - 1)
+  const hoverLabel = hoveredIdx >= 0 ? `Оценка: ${normalized[hoveredIdx]}/10` : ''
 
   return (
     <div className="sparkline-wrap">
       <svg viewBox={`0 0 ${width} ${height}`} className="sparkline" role="img" aria-label="Динамика оценок">
-        <polyline points={points} />
+        <polyline points={points} className={lineClass} />
+        {normalized.map((score, idx) => {
+          const x = padding + idx * stepX
+          const y = padding + (10 - Math.max(0, Math.min(10, score))) * ((height - padding * 2) / 10)
+          const isHovered = hoveredIdx === idx
+          return (
+            <circle
+              key={`${idx}-${score}`}
+              cx={x}
+              cy={y}
+              r={isHovered ? 4.4 : 2.8}
+              className={`sparkline-point ${isHovered ? 'is-active' : ''}`}
+              onMouseEnter={() => setHoveredIdx(idx)}
+              onMouseLeave={() => setHoveredIdx(-1)}
+            />
+          )
+        })}
       </svg>
       <div className="sparkline-meta">
-        <span>Последняя: {last}/10</span>
+        <span>{hoverLabel || `Последняя: ${last}/10`}</span>
         <span>Точек: {normalized.length}</span>
       </div>
     </div>
@@ -574,7 +595,7 @@ function AccountPage({
           </div>
           <p className="muted">{profileProgress.stage}</p>
           <p>{profileProgress.description}</p>
-          <ProgressSparkline scores={profileStats?.recent_scores || []} />
+          <ProgressSparkline scores={profileStats?.recent_scores || []} trend={profileStats?.trend} />
         </div>
         <div className="limit-row">
           <span>Осталось сегодня</span>

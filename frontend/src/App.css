@@ -542,10 +542,33 @@ h2 {
 
 .sparkline polyline {
   fill: none;
-  stroke: #327d72;
   stroke-width: 2.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.sparkline polyline.trend-up {
+  stroke: #2f8f6f;
+}
+
+.sparkline polyline.trend-stable {
+  stroke: #c08b1f;
+}
+
+.sparkline polyline.trend-down {
+  stroke: #cf4f45;
+}
+
+.sparkline-point {
+  fill: #ffffff;
+  stroke: rgba(21, 21, 21, 0.35);
+  stroke-width: 1.5;
+  transition: r 0.12s ease, stroke 0.12s ease, fill 0.12s ease;
+}
+
+.sparkline-point.is-active {
+  fill: #151515;
+  stroke: #151515;
 }
 
 .sparkline-meta {
