@@ -75,9 +75,3 @@ TOP_P=0.85
 - `GET /api/sessions/:id` - открыть сохраненный диалог. Требует `X-User-ID`.
 - `GET /api/get-feedback?session_id=...` - получить JSON-разбор диалога. Требует `X-User-ID`.
 - `GET /api/check-models` - проверить metadata inference-сервиса.
-
-## Важно
-
-Mock-режим удален. Если `ml-service` недоступен, backend возвращает ошибку, а UI показывает проблему со статусом inference server.
-
-Сейчас пользователи, лимиты и история хранятся в памяти Go-процесса. Для production следующим шагом стоит заменить `internal/storage` на PostgreSQL или SQLite.
