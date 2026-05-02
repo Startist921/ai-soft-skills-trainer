@@ -21,8 +21,8 @@ docker compose up --build
 
 После запуска:
 
-- frontend: `http://localhost:5173`
-- backend: `http://localhost:8080`
+- frontend (через nginx): `http://localhost`
+- backend API (через nginx): `http://localhost/api/...`
 - inference: `http://localhost:8087`
 
 Проверка работы inference-сервиса:
@@ -35,6 +35,7 @@ curl http://localhost:8080/api/check-models
 
 Вставляйте свои значения в корневой файл `.env`.
 Если вы не используете Docker Compose, можно скопировать `.env.example` в `.env` и заменить нужные параметры.
+Для прод-режима с внешним IP открывайте только `80` порт наружу: frontend сам проксирует `/api` на backend внутри docker-сети.
 
 ```env
 PORT=8080
@@ -58,6 +59,7 @@ TOP_P=0.85
 ## Возможности
 
 - Регистрация и вход.
+- Улучшенная регистрация: подтверждение пароля и индикатор сложности пароля.
 - Личный кабинет с дневным лимитом тренировок.
 - Автоматический сброс лимита по UTC-дате.
 - Сохранение истории диалогов в backend-памяти текущего процесса.

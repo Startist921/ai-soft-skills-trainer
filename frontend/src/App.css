@@ -99,6 +99,10 @@ textarea:disabled {
   white-space: nowrap;
 }
 
+.model-button {
+  cursor: pointer;
+}
+
 .workspace {
   width: min(1320px, 100%);
   margin: 0 auto;
@@ -475,6 +479,14 @@ h2 {
   gap: 8px;
   color: #625b50;
   font-weight: 800;
+}
+
+.password-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #625b50;
+  font-size: 0.9rem;
 }
 
 .limit-row {

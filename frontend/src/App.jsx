@@ -4,7 +4,27 @@ import MessageList from './components/MessageList'
 import MessageInput from './components/MessageInput'
 import FeedbackPanel from './components/FeedbackPanel'
 
-const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080/api'
+const apiUrl = import.meta.env.VITE_API_URL || '/api'
+
+function getNetworkErrorMessage(error, fallbackText) {
+  if (error instanceof TypeError) {
+    return 'Сетевой запрос не дошел до API. Проверьте URL backend/nginx и CORS.'
+  }
+  return error?.message || fallbackText
+}
+
+function getPasswordStrength(password) {
+  if (!password) return { label: 'пустой', score: 0 }
+  let score = 0
+  if (password.length >= 8) score += 1
+  if (/[A-Z]/.test(password)) score += 1
+  if (/[a-z]/.test(password)) score += 1
+  if (/[0-9]/.test(password)) score += 1
+  if (/[^A-Za-z0-9]/.test(password)) score += 1
+  if (score <= 2) return { label: 'слабый', score }
+  if (score <= 4) return { label: 'средний', score }
+  return { label: 'сильный', score }
+}
 
 const fallbackScenarios = [
   {
@@ -34,7 +54,7 @@ function App() {
   const [error, setError] = useState('')
   const [modelState, setModelState] = useState('Проверяем модель...')
   const [authMode, setAuthMode] = useState('login')
-  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '' })
+  const [authForm, setAuthForm] = useState({ name: '', email: '', password: '', confirmPassword: '' })
 
   const authHeaders = useMemo(() => (
     user ? { 'X-User-ID': user.id } : {}
@@ -115,23 +135,43 @@ function App() {
 
   async function submitAuth(event) {
     event.preventDefault()
+    if (authMode === 'register') {
+      const trimmedName = authForm.name.trim()
+      if (!trimmedName) {
+        setError('Введите имя для регистрации.')
+        return
+      }
+      if (authForm.password.length < 6) {
+        setError('Пароль должен быть не короче 6 символов.')
+        return
+      }
+      if (authForm.password !== authForm.confirmPassword) {
+        setError('Пароли не совпадают.')
+        return
+      }
+    }
     setLoading(true)
     setError('')
     try {
       const response = await fetch(`${apiUrl}/${authMode === 'login' ? 'login' : 'register'}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(authForm),
+        body: JSON.stringify({
+          name: authForm.name.trim(),
+          email: authForm.email.trim(),
+          password: authForm.password,
+        }),
       })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        setError(data.error || 'Не удалось войти')
+        setError(data.error || (authMode === 'login' ? 'Не удалось войти' : 'Не удалось зарегистрироваться'))
         return
       }
       setUser(data.user)
       setView('trainer')
+      setAuthForm({ name: '', email: '', password: '', confirmPassword: '' })
     } catch (err) {
-      setError(err.message || 'Ошибка сети')
+      setError(getNetworkErrorMessage(err, 'Ошибка сети'))
     } finally {
       setLoading(false)
     }
@@ -167,7 +207,7 @@ function App() {
       setView('trainer')
       await loadProfile()
     } catch (err) {
-      setError(err.message || 'Ошибка сети при запуске сессии')
+      setError(getNetworkErrorMessage(err, 'Ошибка сети при запуске сессии'))
     } finally {
       setLoading(false)
     }
@@ -198,7 +238,7 @@ function App() {
         setError('Сервер вернул пустой ответ от inference-модели.')
       }
     } catch (err) {
-      setError(err.message || 'Ошибка сети при отправке сообщения')
+      setError(getNetworkErrorMessage(err, 'Ошибка сети при отправке сообщения'))
     } finally {
       setAiTyping(false)
     }
@@ -220,7 +260,7 @@ function App() {
       setFeedback(data)
       await loadProfile()
     } catch (err) {
-      setError(err.message || 'Ошибка сети при получении разбора')
+      setError(getNetworkErrorMessage(err, 'Ошибка сети при получении разбора'))
     } finally {
       setLoading(false)
     }
@@ -249,9 +289,17 @@ function App() {
       setFeedback(null)
       setView('trainer')
     } catch (err) {
-      setError(err.message || 'Ошибка сети')
+      setError(getNetworkErrorMessage(err, 'Ошибка сети'))
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function refreshStatus() {
+    setModelState('Проверяем модель...')
+    await loadBootData()
+    if (user?.id) {
+      await loadProfile(user.id)
     }
   }
 
@@ -273,7 +321,9 @@ function App() {
           <button className={view === 'trainer' ? 'active' : ''} onClick={() => setView('trainer')}>Тренировки</button>
           <button className={view === 'account' ? 'active' : ''} onClick={() => setView('account')}>Кабинет</button>
         </div>
-        <div className="model-pill">{modelState}</div>
+        <button className="model-pill model-button" onClick={refreshStatus} title="Обновить статус сервиса">
+          {modelState}
+        </button>
       </nav>
 
       <main className="workspace">
@@ -387,6 +437,8 @@ function AccountPage({
   onOpenSession,
   loading,
 }) {
+  const passwordStrength = getPasswordStrength(authForm.password)
+
   if (!user) {
     return (
       <section className="account-layout">
@@ -410,6 +462,18 @@ function AccountPage({
             Пароль
             <input type="password" value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} />
           </label>
+          {authMode === 'register' && (
+            <>
+              <label>
+                Подтверждение пароля
+                <input type="password" value={authForm.confirmPassword} onChange={(event) => setAuthForm({ ...authForm, confirmPassword: event.target.value })} />
+              </label>
+              <div className="password-meta">
+                <span>Сложность: <strong>{passwordStrength.label}</strong></span>
+                <span>{authForm.password.length} символов</span>
+              </div>
+            </>
+          )}
           <button className="finish-button" disabled={loading}>
             {authMode === 'login' ? 'Войти' : 'Создать аккаунт'}
           </button>
