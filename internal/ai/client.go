@@ -79,13 +79,24 @@ func NewClient(serviceURL, modelName string, maxTokens int, temperature float64,
 }
 
 func (c *Client) SendMessage(ctx context.Context, systemPrompt string, history []models.Message) (string, error) {
+	return c.sendMessageWithLimit(ctx, systemPrompt, history, c.maxTokens)
+}
+
+func (c *Client) SendMessageWithMaxTokens(ctx context.Context, systemPrompt string, history []models.Message, maxTokens int) (string, error) {
+	if maxTokens <= 0 {
+		maxTokens = c.maxTokens
+	}
+	return c.sendMessageWithLimit(ctx, systemPrompt, history, maxTokens)
+}
+
+func (c *Client) sendMessageWithLimit(ctx context.Context, systemPrompt string, history []models.Message, maxTokens int) (string, error) {
 	prompt := c.buildPrompt(systemPrompt, history)
 
 	body, err := json.Marshal(inferenceGenerateRequest{
 		Model:       c.modelName,
 		Prompt:      prompt,
 		Temperature: c.temperature,
-		MaxTokens:   c.maxTokens,
+		MaxTokens:   maxTokens,
 		TopP:        c.topP,
 	})
 	if err != nil {

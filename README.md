@@ -44,6 +44,7 @@ ML_SERVICE_URL=http://ml-service:8087
 MODEL_NAME=GigaChat
 SBER_AUTH=
 MAX_NEW_TOKENS=300
+FEEDBACK_MAX_NEW_TOKENS=420
 TEMPERATURE=0.55
 TOP_P=0.85
 ```
@@ -52,7 +53,8 @@ TOP_P=0.85
 - `ML_SERVICE_URL` — URL inference-сервиса `ml-service`. В Docker Compose это `http://ml-service:8087`.
 - `MODEL_NAME` — имя модели, которая используется `ml-service` (по умолчанию `GigaChat`).
 - `SBER_AUTH` — ключ/токен доступа к Gigachat/Sber, если ваш inference-сервис требует авторизации. Вставляйте сюда строку токена, иначе оставьте пустым.
-- `MAX_NEW_TOKENS`, `TEMPERATURE`, `TOP_P` — параметры генерации для модели.
+- `MAX_NEW_TOKENS`, `TEMPERATURE`, `TOP_P` — параметры генерации для ролевого диалога.
+- `FEEDBACK_MAX_NEW_TOKENS` — отдельный лимит токенов для разбора диалога (рекомендуется выше обычного лимита, чтобы JSON не обрывался).
 
 Если `ml-service` запускается локально на той же машине, используйте `http://localhost:8087` в `ML_SERVICE_URL`.
 

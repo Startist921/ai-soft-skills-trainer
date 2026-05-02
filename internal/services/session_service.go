@@ -33,16 +33,25 @@ type Scenario struct {
 }
 
 type SessionService struct {
-	store      storage.Store
-	aiClient   *ai.Client
-	dailyLimit int
+	store             storage.Store
+	aiClient          *ai.Client
+	dailyLimit        int
+	feedbackMaxTokens int
 }
 
-func NewSessionService(store storage.Store, aiClient *ai.Client, dailyLimit int) *SessionService {
+func NewSessionService(store storage.Store, aiClient *ai.Client, dailyLimit int, feedbackMaxTokens int) *SessionService {
 	if dailyLimit <= 0 {
 		dailyLimit = defaultDailyLimit
 	}
-	return &SessionService{store: store, aiClient: aiClient, dailyLimit: dailyLimit}
+	if feedbackMaxTokens <= 0 {
+		feedbackMaxTokens = 420
+	}
+	return &SessionService{
+		store:             store,
+		aiClient:          aiClient,
+		dailyLimit:        dailyLimit,
+		feedbackMaxTokens: feedbackMaxTokens,
+	}
 }
 
 func (s *SessionService) Register(name, email, password string) (*models.User, error) {
@@ -230,7 +239,12 @@ func (s *SessionService) GetFeedback(ctx context.Context, userID, sessionID stri
 		return nil, err
 	}
 
-	response, err := s.aiClient.SendMessage(ctx, buildFeedbackPrompt(scenario), session.Messages)
+	response, err := s.aiClient.SendMessageWithMaxTokens(
+		ctx,
+		buildFeedbackPrompt(scenario),
+		session.Messages,
+		s.feedbackMaxTokens,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -407,10 +421,10 @@ func parseFeedback(raw string) (*models.Feedback, error) {
 	var feedback models.Feedback
 	if jsonText != "" {
 		if err := json.Unmarshal([]byte(jsonText), &feedback); err != nil {
-			feedback = buildFallbackFeedback(raw)
+			feedback = parseLooseJSONFeedback(raw)
 		}
 	} else {
-		feedback = buildFallbackFeedback(raw)
+		feedback = parseLooseJSONFeedback(raw)
 	}
 
 	if feedback.Score < 0 {
@@ -481,6 +495,25 @@ func buildFallbackFeedback(raw string) models.Feedback {
 	return feedback
 }
 
+func parseLooseJSONFeedback(raw string) models.Feedback {
+	text := strings.TrimSpace(strings.ToValidUTF8(raw, ""))
+
+	feedback := models.Feedback{
+		Score:         extractFallbackScore(text),
+		Strengths:     extractJSONListField(text, "strengths"),
+		Improvements:  extractJSONListField(text, "improvements"),
+		Summary:       extractJSONStringField(text, "summary"),
+		BetterExample: extractJSONStringField(text, "better_example"),
+	}
+
+	// If model returned something too broken for field extraction, fallback.
+	if len(feedback.Strengths) == 0 && len(feedback.Improvements) == 0 && feedback.Summary == "" {
+		return buildFallbackFeedback(text)
+	}
+
+	return feedback
+}
+
 func extractFallbackScore(text string) int {
 	percentRe := regexp.MustCompile(`([0-9]{1,3})\s*%`)
 	if match := percentRe.FindStringSubmatch(text); len(match) > 1 {
@@ -526,9 +559,58 @@ func collectContentLines(text string) []string {
 		if line == "" {
 			continue
 		}
+		if strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") {
+			continue
+		}
+		if strings.HasPrefix(line, "\"score\"") ||
+			strings.HasPrefix(line, "\"strengths\"") ||
+			strings.HasPrefix(line, "\"improvements\"") ||
+			strings.HasPrefix(line, "\"summary\"") ||
+			strings.HasPrefix(line, "\"better_example\"") {
+			continue
+		}
 		result = append(result, strings.ToValidUTF8(line, ""))
 	}
 	return result
+}
+
+func extractJSONStringField(text, field string) string {
+	re := regexp.MustCompile(`(?is)"` + regexp.QuoteMeta(field) + `"\s*:\s*"((?:\\.|[^"\\])*)"`)
+	match := re.FindStringSubmatch(text)
+	if len(match) < 2 {
+		return ""
+	}
+	unquoted, err := strconv.Unquote(`"` + match[1] + `"`)
+	if err != nil {
+		return strings.TrimSpace(strings.ToValidUTF8(match[1], ""))
+	}
+	return strings.TrimSpace(strings.ToValidUTF8(unquoted, ""))
+}
+
+func extractJSONListField(text, field string) []string {
+	re := regexp.MustCompile(`(?is)"` + regexp.QuoteMeta(field) + `"\s*:\s*\[(.*?)\]`)
+	match := re.FindStringSubmatch(text)
+	if len(match) < 2 {
+		return nil
+	}
+
+	itemRe := regexp.MustCompile(`"((?:\\.|[^"\\])*)"`)
+	itemMatches := itemRe.FindAllStringSubmatch(match[1], -1)
+	items := make([]string, 0, len(itemMatches))
+	for _, itemMatch := range itemMatches {
+		if len(itemMatch) < 2 {
+			continue
+		}
+		value, err := strconv.Unquote(`"` + itemMatch[1] + `"`)
+		if err != nil {
+			value = itemMatch[1]
+		}
+		value = strings.TrimSpace(strings.ToValidUTF8(value, ""))
+		if value != "" {
+			items = append(items, value)
+		}
+	}
+	return items
 }
 
 func truncateRunes(text string, limit int) string {

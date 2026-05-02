@@ -30,6 +30,7 @@ services:
       MODEL_NAME: GigaChat
       DATABASE_URL: postgres://softskills:softskills@postgres:5432/softskills?sslmode=disable
       MAX_NEW_TOKENS: 120
+      FEEDBACK_MAX_NEW_TOKENS: 420
       TEMPERATURE: 0.55
       TOP_P: 0.85
     ports:

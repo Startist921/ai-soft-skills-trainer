@@ -37,6 +37,15 @@ func main() {
 		maxNewTokens = parsed
 	}
 
+	feedbackMaxTokens := 420
+	if value := os.Getenv("FEEDBACK_MAX_NEW_TOKENS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			log.Fatalf("invalid FEEDBACK_MAX_NEW_TOKENS value: %v", err)
+		}
+		feedbackMaxTokens = parsed
+	}
+
 	temperature := 0.55
 	if value := os.Getenv("TEMPERATURE"); value != "" {
 		parsed, err := strconv.ParseFloat(value, 64)
@@ -78,7 +87,7 @@ func main() {
 	}
 
 	aiclient := ai.NewClient(mlServiceURL, modelName, maxNewTokens, temperature, topP)
-	service := services.NewSessionService(store, aiclient, dailyLimit)
+	service := services.NewSessionService(store, aiclient, dailyLimit, feedbackMaxTokens)
 	h := handlers.NewHandler(service)
 
 	router := gin.Default()
